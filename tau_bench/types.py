@@ -74,6 +74,9 @@ class RunConfig(BaseModel):
     user_model_provider: str
     model: str
     user_model: str = "gpt-4o"
+    summary_model: str = "gpt-5-mini-2025-08-07"
+    summary_model_provider: Optional[str] = None
+    summary_effort: str = "medium"
     num_trials: int = 1
     env: str = "retail"
     agent_strategy: str = "tool-calling"

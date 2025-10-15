@@ -31,6 +31,26 @@ def parse_args() -> RunConfig:
         help="The model to use for the user simulator",
     )
     parser.add_argument(
+        "--summary-model",
+        type=str,
+        default="gpt-5-mini-2025-08-07",
+        help="The model to use for intermediate summaries",
+    )
+    parser.add_argument(
+        "--summary-model-provider",
+        type=str,
+        choices=provider_list,
+        default=None,
+        help="The model provider for intermediate summaries (defaults to --model-provider)",
+    )
+    parser.add_argument(
+        "--summary-effort",
+        type=str,
+        default="medium",
+        choices=["low", "medium", "high"],
+        help="Reasoning effort setting for summary calls",
+    )
+    parser.add_argument(
         "--user-model-provider",
         type=str,
         choices=provider_list,
@@ -76,6 +96,9 @@ def parse_args() -> RunConfig:
         user_model_provider=args.user_model_provider,
         model=args.model,
         user_model=args.user_model,
+        summary_model=args.summary_model,
+        summary_model_provider=args.summary_model_provider or args.model_provider,
+        summary_effort=args.summary_effort,
         num_trials=args.num_trials,
         env=args.env,
         agent_strategy=args.agent_strategy,

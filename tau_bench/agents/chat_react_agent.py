@@ -4,6 +4,7 @@ import json
 from litellm import completion
 
 from tau_bench.agents.base import Agent
+from tau_bench.model_utils.summarizer import ConversationSummarizer
 from tau_bench.envs.base import Env
 from tau_bench.types import (
     Action,
@@ -23,6 +24,9 @@ class ChatReActAgent(Agent):
         provider: str,
         use_reasoning: bool = True,
         temperature: float = 0.0,
+        summary_model: str = "gpt-5-mini-2025-08-07",
+        summary_provider: str = "openai",
+        summary_effort: str = "medium",
     ) -> None:
         instruction = REACT_INSTRUCTION if use_reasoning else ACT_INSTRUCTION
         self.prompt = (
@@ -33,6 +37,9 @@ class ChatReActAgent(Agent):
         self.temperature = temperature
         self.use_reasoning = use_reasoning
         self.tools_info = tools_info
+        self.summary_model = summary_model
+        self.summary_provider = summary_provider
+        self.summary_effort = summary_effort
 
     def generate_next_step(
         self, messages: List[Dict[str, Any]]
@@ -69,12 +76,52 @@ class ChatReActAgent(Agent):
         ]
         total_cost = 0.0
         info = {}
+        summaries: List[Dict[str, Any]] = []
+        summarizer = ConversationSummarizer(
+            model=self.summary_model,
+            provider=self.summary_provider,
+            effort=self.summary_effort,
+        )
+        question_number = 0
+
+        def record_summary(latest_user_message: str) -> None:
+            nonlocal question_number
+            if latest_user_message is None:
+                return
+            trimmed = latest_user_message.strip()
+            if not trimmed or trimmed == "###STOP###":
+                return
+            question_number += 1
+            try:
+                summary_text = summarizer.summarize(
+                    question_number=question_number,
+                    messages=messages,
+                    latest_user_message=latest_user_message,
+                )
+                summaries.append(
+                    {
+                        "question_number": question_number,
+                        "summary": summary_text,
+                    }
+                )
+                print(f"[Summary q{question_number}] {summary_text}")
+            except Exception as err:
+                summaries.append(
+                    {
+                        "question_number": question_number,
+                        "error": str(err),
+                    }
+                )
+                print(f"[Summary q{question_number} ERROR] {err}")
+
+        record_summary(response.observation)
         for _ in range(max_num_steps):
             message, action, cost = self.generate_next_step(messages)
             response = env.step(action)
             obs = response.observation
             reward = response.reward
             info = {**info, **response.info.model_dump()}
+            latest_user_message = response.observation if response.info.source == "user" else None
             if action.name != RESPOND_ACTION_NAME:
                 obs = "API output: " + obs
             messages.extend(
@@ -84,8 +131,12 @@ class ChatReActAgent(Agent):
                 ]
             )
             total_cost += cost
+            if latest_user_message is not None:
+                record_summary(latest_user_message)
             if response.done:
                 break
+        if summaries:
+            info["summaries"] = summaries
         return SolveResult(
             messages=messages,
             reward=reward,

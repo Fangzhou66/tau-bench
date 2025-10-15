@@ -24,6 +24,9 @@ def run(config: RunConfig) -> List[EnvRunResult]:
     assert config.agent_strategy in ["tool-calling", "act", "react", "few-shot"], "Invalid agent strategy"
     assert config.task_split in ["train", "test", "dev"], "Invalid task split"
     assert config.user_strategy in [item.value for item in UserStrategy], "Invalid user strategy"
+    summary_provider = config.summary_model_provider or config.model_provider
+    assert summary_provider in provider_list, "Invalid summary model provider"
+    config.summary_model_provider = summary_provider
 
     random.seed(config.seed)
     time_str = datetime.now().strftime("%m%d%H%M%S")
@@ -124,6 +127,11 @@ def run(config: RunConfig) -> List[EnvRunResult]:
 def agent_factory(
     tools_info: List[Dict[str, Any]], wiki, config: RunConfig
 ) -> Agent:
+    summarizer_kwargs = dict(
+        summary_model=config.summary_model,
+        summary_provider=config.summary_model_provider,
+        summary_effort=config.summary_effort,
+    )
     if config.agent_strategy == "tool-calling":
         # native tool calling
         from tau_bench.agents.tool_calling_agent import ToolCallingAgent
@@ -134,6 +142,7 @@ def agent_factory(
             model=config.model,
             provider=config.model_provider,
             temperature=config.temperature,
+            **summarizer_kwargs,
         )
     elif config.agent_strategy == "act":
         # `act` from https://arxiv.org/abs/2210.03629
@@ -146,6 +155,7 @@ def agent_factory(
             provider=config.model_provider,
             use_reasoning=False,
             temperature=config.temperature,
+            **summarizer_kwargs,
         )
     elif config.agent_strategy == "react":
         # `react` from https://arxiv.org/abs/2210.03629
@@ -158,6 +168,7 @@ def agent_factory(
             provider=config.model_provider,
             use_reasoning=True,
             temperature=config.temperature,
+            **summarizer_kwargs,
         )
     elif config.agent_strategy == "few-shot":
         from tau_bench.agents.few_shot_agent import FewShotToolCallingAgent
@@ -172,6 +183,7 @@ def agent_factory(
             provider=config.model_provider,
             few_shot_displays=few_shot_displays,
             temperature=config.temperature,
+            **summarizer_kwargs,
         )
     else:
         raise ValueError(f"Unknown agent strategy: {config.agent_strategy}")
